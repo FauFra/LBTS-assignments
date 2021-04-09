@@ -103,9 +103,9 @@ let rec eval (e : expr) (stack : permissions_stack) (env : value env) : value =
             in eval fBody (perm_frame::stack) fBodyEnv
         | _ -> failwith "eval Call: not a function"
       end 
-  |Read x -> if (check_permissions ReadPerm stack) then Int 1 else failwith "forbidden permission (read)"
-  |Write(_) -> if (check_permissions WritePerm stack) then Int 1 else failwith "forbidden permission (write)"
-  |Exec x -> if (check_permissions ExecPerm stack) then Int 1 else failwith "forbidden permission (exec)"
+  |Read x -> if (check_permissions ReadPerm stack) then Int 1 else failwith "permission denied (read)"
+  |Write(_) -> if (check_permissions WritePerm stack) then Int 1 else failwith "permission denied (write)"
+  |Exec x -> if (check_permissions ExecPerm stack) then Int 1 else failwith "permission denied (exec)"
 
 
 
