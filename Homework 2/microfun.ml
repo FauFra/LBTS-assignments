@@ -40,7 +40,7 @@ type history_stack = symbol list
 type value =
   | Int of int
   | Closure of string * expr * value env
-  | RecClosure of string * (string * expr * value env)
+  | RecClosure of string * string * expr * value env
 
 (* Type returned by eval *)
 type ret_val = value * policy_stack * history_stack
@@ -122,14 +122,13 @@ let rec eval (e : expr) (env : value env) (pol_stack: policy_stack) (his : histo
         | (_)    -> failwith "eval If"
       end
   | Fun(x,fBody) -> (Closure(x, fBody, env), pol_stack, his)
-  | RecFun(x, funDef, body) ->
+  | RecFun(x, funDef, funCall) ->
       begin
         match funDef with
-          |Fun(y, fBody) -> 
-            let rec_fun = RecClosure(x, (y, fBody, env))
-            in
-              let new_env = (x, rec_fun)::env
-              in eval body new_env pol_stack his
+          |Fun(arg, fBody) -> 
+            let rec_fun = RecClosure(x, arg, fBody, env) in
+            let new_env = (x, rec_fun)::env in
+            eval funCall new_env pol_stack his
           |_ -> failwith("non functional def")
       end
   | Call(eFun, eArg) ->let (fClosure, _, _) = eval eFun env pol_stack his in
@@ -139,32 +138,32 @@ let rec eval (e : expr) (env : value env) (pol_stack: policy_stack) (his : histo
             let (xVal, new_pol_stack, new_his) = eval eArg env pol_stack his in
             let fBodyEnv = (x, xVal) :: fDeclEnv
             in eval fBody fBodyEnv new_pol_stack new_his
-        | RecClosure(x, (arg, fBody, fDeclEnv)) ->
-          let (xVal, new_pol_stack, new_his) = eval eArg env pol_stack his in
-          let env_1 = (x,fClosure)::env in
-          let env_2 = (arg, xVal)::env_1 in
-          eval fBody env_2 new_pol_stack new_his
+        | RecClosure(x, fArg, fBody, fDeclEnv) ->
+            let (aVal, new_pol_stack, new_his) = eval eArg env pol_stack his in
+            let rEnv = (x,fClosure)::env in (* ambiente con la chiusura ricorsiva *)
+            let aEnv = (fArg, aVal)::rEnv in (* ambinete con il bind tra parametro attuale e argomento della funzione*)
+            eval fBody aEnv new_pol_stack new_his
         | _ -> failwith "eval Call: not a function"
       end 
-  |Frame(policy, body) -> 
+  | Frame(policy, body) -> 
     let (current_state, accepted) = check_history policy his
     in
       if(accepted) then
         let (value, _, new_his) = eval body env ((current_state,policy)::pol_stack) his
         in (value, pol_stack, new_his)
       else failwith "Violated policy (frame)"
-  |Read x -> 
-    let new_pol_stack = check_policy_stack pol_stack Read
-    in (Int 1, new_pol_stack, his@[Read])
-  |Write(_) -> 
-    let new_pol_stack = check_policy_stack pol_stack Write
-    in (Int 1, new_pol_stack, his@[Write])
-  |Connect x ->
-    let new_pol_stack = check_policy_stack pol_stack Connect
-  in (Int 1, new_pol_stack, his@[Write])
+  | Read x -> 
+      let new_pol_stack = check_policy_stack pol_stack Read
+      in (Int 1, new_pol_stack, his@[Read])
+  | Write(_) -> 
+      let new_pol_stack = check_policy_stack pol_stack Write
+      in (Int 1, new_pol_stack, his@[Write])
+  | Connect x ->
+      let new_pol_stack = check_policy_stack pol_stack Connect
+      in (Int 1, new_pol_stack, his@[Connect])
 
 
-(* no write *)
+(* No write *)
 let	d	:	dfa	=		
 {	states	=	[0];	
     sigma	=	[Read; Write];	
@@ -172,11 +171,13 @@ let	d	:	dfa	=
     transitions	=	
         [
           (0,Read,0);	
+          (0,Connect,0);	
           (0,Write,1)
         ];	
     accepting	=	[0];
 }	
 
+(* No read after write *)
 let	d1	:	dfa	=		
 {	states	=	[0;1;2];	
     sigma	=	[Read; Write];	
@@ -194,14 +195,13 @@ let	d1	:	dfa	=
 }	
 
 
-
+(* Read, phi_d1[Read, phi_d[Read], Write], Write *)
 let frame1 = Frame(d, Read("prova"));;
 let r0 = Let("q", frame1, Write("x", CstI 1));;
 let r1 = Let("y",Read("x"), r0);;
 
 let frame2 = Frame(d1, r1);;
-let sum = Prim("+", CstI 1, CstI 1);;
-let r2 = Let("x", sum, frame2);;
+let r2 = Let("x", Read("prova"), frame2);;
 
 let r3 = Let("z", r2, Write("x", CstI 1));;
 
@@ -212,3 +212,12 @@ let ps = [];;
 
 
 eval r3 e0 ps h;;
+
+let iF = If(Prim("=",Var "x", CstI 0), CstI 0, Call(Var "fact", Prim("-", Var "x", CstI 1)));;
+
+let recfun = 
+  RecFun("fact",
+    Fun("x",Prim("+",Var "x", iF)),
+  Call(Var "fact", CstI 3));;
+
+eval recfun e0 ps h;;
