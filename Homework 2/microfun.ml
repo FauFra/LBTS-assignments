@@ -19,7 +19,7 @@ type expr =
   | Let of string * expr * expr
   | Prim of string * expr * expr
   | If of expr * expr * expr
-  | Fun of string * expr   (* Lambda , param Body *)
+  | Fun of string * expr   
   | RecFun of string * expr * expr
   | Call of expr * expr
   | Frame of dfa * expr
@@ -239,13 +239,3 @@ let r3 = Let("z", r2, frame2);;
 
 (* Output: Exception: Failure "Violated policy (check_policy_stack)" *)
 eval r3 e0 ps h;;
-
-
-let iF = If(Prim("=",Var "x", CstI 0), CstI 0, Call(Var "fact", Prim("-", Var "x", CstI 1)));;
-
-let recfun = 
-  RecFun("fact",
-    Fun("x",Prim("+",Var "x", iF)),
-  Call(Var "fact", CstI 3));;
-
-eval recfun e0 ps h;;
